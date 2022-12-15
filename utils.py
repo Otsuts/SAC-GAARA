@@ -1,12 +1,10 @@
 import torch
 import numpy as np
-import torch.nn as nn
 import gym
 import os
 from collections import deque
 import random
 from skimage.util.shape import view_as_windows
-import time
 
 
 class eval_mode(object):
@@ -71,6 +69,16 @@ class ReplayBuffer(object):
     """Buffer to store environment transitions."""
 
     def __init__(self, obs_shape, action_shape, capacity, batch_size, device, image_size=84, transform=None):
+        '''
+
+        :param obs_shape: 输入的图片形状，长和宽目前分别为100和100
+        :param action_shape:
+        :param capacity:
+        :param batch_size:
+        :param device:
+        :param image_size: 经过裁剪后的形状， 长和宽现在是84*84
+        :param transform: 预传入的图片增强方式
+        '''
         self.capacity = capacity
         self.batch_size = batch_size
         self.device = device
@@ -100,23 +108,8 @@ class ReplayBuffer(object):
         self.idx = (self.idx + 1) % self.capacity
         self.full = self.full or self.idx == 0
 
-    def sample(self):
-        idxs = np.random.randint(
-            0, self.capacity if self.full else self.idx, size=self.batch_size
-        )
-
-        obses = torch.as_tensor(self.obses[idxs], device=self.device).float()
-        actions = torch.as_tensor(self.actions[idxs], device=self.device)
-        rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
-        next_obses = torch.as_tensor(
-            self.next_obses[idxs], device=self.device
-        ).float()
-        not_dones = torch.as_tensor(self.not_dones[idxs], device=self.device)
-
-        return obses, actions, rewards, next_obses, not_dones
-
     def sample_proprio(self):
-
+        # 正常采样，无裁剪
         idxs = np.random.randint(
             0, self.capacity if self.full else self.idx, size=self.batch_size
         )
@@ -134,7 +127,7 @@ class ReplayBuffer(object):
         return obses, actions, rewards, next_obses, not_dones
 
     def sample_cpc(self):
-
+        # 有裁剪的采样
         idxs = np.random.randint(
             0, self.capacity if self.full else self.idx, size=self.batch_size
         )
@@ -160,22 +153,6 @@ class ReplayBuffer(object):
                           time_anchor=None, time_pos=None)
 
         return obses, actions, rewards, next_obses, not_dones, cpc_kwargs
-
-    def __getitem__(self, idx):
-        idx = np.random.randint(
-            0, self.capacity if self.full else self.idx, size=1
-        )
-        idx = idx[0]
-        obs = self.obses[idx]
-        action = self.actions[idx]
-        reward = self.rewards[idx]
-        next_obs = self.next_obses[idx]
-        not_done = self.not_dones[idx]
-
-        if self.transform:
-            obs = self.transform(obs)
-            next_obs = self.transform(next_obs)
-        return obs, action, reward, next_obs, not_done
 
     def save(self, save_dir):
         if self.idx == self.last_save:

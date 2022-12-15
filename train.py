@@ -1,25 +1,18 @@
 import os
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-import numpy as np
 import torch
 import argparse
 import os
-import math
-import gym
-import sys
-import random
 import time
 import json
 import dmc2gym
-import copy
 
 import utils
 from logger import Logger
 from video import VideoRecorder
 
-from sac_ae import SacAeAgent
-
+from sac_cae import SacCaeAgent
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -33,7 +26,7 @@ def parse_args():
     # replay buffer
     parser.add_argument('--replay_buffer_capacity', default=100000, type=int)
     # train
-    parser.add_argument('--agent', default='sac_ae', type=str)
+    parser.add_argument('--agent', default='sac_cae', type=str)
     parser.add_argument('--init_steps', default=1000, type=int)
     parser.add_argument('--num_train_steps', default=1000000, type=int)
     parser.add_argument('--batch_size', default=128, type=int)
@@ -62,9 +55,10 @@ def parse_args():
     parser.add_argument('--decoder_update_freq', default=1, type=int)
     parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
     parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
-    parser.add_argument('--comparison_lambda', default=5e-8, type=float)
+    parser.add_argument('--comparison_lambda', default=2e-8, type=float)
     parser.add_argument('--num_layers', default=4, type=int)
     parser.add_argument('--num_filters', default=32, type=int)
+    parser.add_argument('--curl_latent_dim', default=128, type=int)
     # sac
     parser.add_argument('--discount', default=0.99, type=float)
     parser.add_argument('--init_temperature', default=0.1, type=float)
@@ -101,8 +95,8 @@ def evaluate(env, agent, video, num_episodes, L, step, args):
 
 
 def make_agent(obs_shape, action_shape, args, device):
-    if args.agent == 'sac_ae':
-        return SacAeAgent(
+    if args.agent == 'sac_cae':
+        return SacCaeAgent(
             obs_shape=obs_shape,
             action_shape=action_shape,
             device=device,
@@ -129,8 +123,11 @@ def make_agent(obs_shape, action_shape, args, device):
             decoder_update_freq=args.decoder_update_freq,
             decoder_latent_lambda=args.decoder_latent_lambda,
             decoder_weight_lambda=args.decoder_weight_lambda,
+            comparison_lambda=args.comparison_lambda,
             num_layers=args.num_layers,
-            num_filters=args.num_filters
+            num_filters=args.num_filters,
+            curl_latent_dim=args.curl_latent_dim,
+            image_size=args.image_size
         )
     else:
         assert 'agent is not supported: %s' % args.agent
@@ -174,7 +171,7 @@ def main():
     obs_shape = (3 * args.frame_stack, args.image_size, args.image_size)
     pre_aug_obs_shape = (3 * args.frame_stack, args.pre_transform_image_size, args.pre_transform_image_size)
     replay_buffer = utils.ReplayBuffer(
-        obs_shape=pre_aug_obs_shape,
+        obs_shape=pre_aug_obs_shape,#长宽都是100
         action_shape=env.action_space.shape,
         capacity=args.replay_buffer_capacity,
         batch_size=args.batch_size,
@@ -182,7 +179,7 @@ def main():
     )
 
     agent = make_agent(
-        obs_shape=obs_shape,
+        obs_shape=obs_shape,# 长宽都是84
         action_shape=env.action_space.shape,
         args=args,
         device=device
