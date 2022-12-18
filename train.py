@@ -55,7 +55,9 @@ def parse_args():
     parser.add_argument('--decoder_update_freq', default=1, type=int)
     parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
     parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
-    parser.add_argument('--comparison_lambda', default=2e-8, type=float)
+    parser.add_argument('--comparison_decay',default=1e-6,type=float)
+    parser.add_argument('--comparison_lambda', default=1.0, type=float)
+    parser.add_argument('--comparison_lower_bound',default=0.06,type=float)
     parser.add_argument('--num_layers', default=4, type=int)
     parser.add_argument('--num_filters', default=32, type=int)
     parser.add_argument('--curl_latent_dim', default=128, type=int)
@@ -71,6 +73,8 @@ def parse_args():
     parser.add_argument('--save_model', default=False, action='store_true')
     parser.add_argument('--save_buffer', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
+
+
 
     args = parser.parse_args()
     return args
@@ -123,7 +127,9 @@ def make_agent(obs_shape, action_shape, args, device):
             decoder_update_freq=args.decoder_update_freq,
             decoder_latent_lambda=args.decoder_latent_lambda,
             decoder_weight_lambda=args.decoder_weight_lambda,
+            comparison_decay=args.comparison_decay,
             comparison_lambda=args.comparison_lambda,
+            comparison_lower_bound=args.comparison_lower_bound,
             num_layers=args.num_layers,
             num_filters=args.num_filters,
             curl_latent_dim=args.curl_latent_dim,

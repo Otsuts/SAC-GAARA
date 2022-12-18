@@ -136,8 +136,8 @@ class ReplayBuffer(object):
         next_obses = self.next_obses[idxs]
         pos = obses.copy()
 
-        obses = random_crop(obses, self.image_size)
-        next_obses = random_crop(next_obses, self.image_size)
+        obses = center_crop(obses, self.image_size)
+        next_obses = center_crop(next_obses, self.image_size)
         pos = random_crop(pos, self.image_size)
 
         obses = torch.as_tensor(obses, device=self.device).float()
@@ -235,6 +235,16 @@ def random_crop(imgs, output_size):
     # selects a random window for each batch element
     cropped_imgs = windows[np.arange(n), w1, h1]
     return cropped_imgs
+
+
+def center_crop(imgs, output_size):
+    h, w = imgs.shape[2:]
+    new_h, new_w = output_size, output_size
+
+    top = (h - new_h) // 2
+    left = (w - new_w) // 2
+    images = imgs[:, :, top:top + new_h, left:left + new_w]
+    return images
 
 
 def center_crop_image(image, output_size):

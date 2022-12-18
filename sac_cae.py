@@ -278,6 +278,8 @@ class SacCaeAgent(object):
             decoder_latent_lambda,
             decoder_weight_lambda,
             comparison_lambda,
+            comparison_decay,
+            comparison_lower_bound,
             num_layers,
             num_filters,
             curl_latent_dim,
@@ -293,6 +295,8 @@ class SacCaeAgent(object):
         self.decoder_latent_lambda = decoder_latent_lambda
         self.curl_latent_dim = curl_latent_dim
         self.comparison_lambda = comparison_lambda
+        self.comparison_decay = comparison_decay
+        self.comparison_lower_bound = comparison_lower_bound
         self.image_size = image_size
         self.cross_entropy_loss = nn.CrossEntropyLoss()
 
@@ -344,6 +348,10 @@ class SacCaeAgent(object):
                 self.decoder.parameters(),
                 lr=decoder_lr,
                 weight_decay=decoder_weight_lambda
+            )
+
+            self.cpc_optimizer = torch.optim.Adam(
+                self.Comparison.parameters(), lr=encoder_lr
             )
 
         # optimizers
@@ -446,14 +454,8 @@ class SacCaeAgent(object):
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
 
-    def update_decoder(self, obs, target_obs, obs_anchor, obs_pos, L, step):
+    def update_decoder_and_comparison(self, obs, target_obs, obs_anchor, obs_pos, L, step):
         h = self.critic.encoder(obs)
-        z_a = self.Comparison.encode(obs_anchor)
-        z_pos = self.Comparison.encode(obs_pos, ema=True)
-
-        logits = self.Comparison.compute_logits(z_a, z_pos)
-        labels = torch.arange(logits.shape[0]).long().to(self.device)
-        loss1 = self.cross_entropy_loss(logits, labels)
 
         if target_obs.dim() == 4:
             # preprocess images to be in [-0.5, 0.5] range
@@ -465,13 +467,25 @@ class SacCaeAgent(object):
         # see https://arxiv.org/pdf/1903.12436.pdf
         # add ||z||^2
         latent_loss = (0.5 * h.pow(2).sum(1)).mean()
-        loss = rec_loss + self.decoder_latent_lambda * latent_loss + self.comparison_lambda * loss1
+        loss = rec_loss + self.decoder_latent_lambda * latent_loss
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
         loss.backward()
 
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
+
+        z_a = self.Comparison.encode(obs_anchor)
+        z_pos = self.Comparison.encode(obs_pos, ema=True)
+
+        logits = self.Comparison.compute_logits(z_a, z_pos)
+        labels = torch.arange(logits.shape[0]).long().to(self.device)
+        loss1 = self.comparison_lambda * self.cross_entropy_loss(logits, labels)
+        if self.comparison_lambda > self.comparison_lower_bound:
+            self.comparison_lambda -= self.comparison_decay
+        self.cpc_optimizer.zero_grad()
+        loss1.backward()
+        self.cpc_optimizer.step()
         L.log('train_ae/ae_loss', loss, step)
 
         self.decoder.log(L, step, log_freq=LOG_FREQ)
@@ -479,7 +493,6 @@ class SacCaeAgent(object):
     def update(self, replay_buffer, L, step):
         # 采样
         obs, action, reward, next_obs, not_done, cpc_kwargs = replay_buffer.sample_cpc()
-
         L.log('train/batch_reward', reward.mean(), step)
 
         self.update_critic(obs, action, reward, next_obs, not_done, L, step)
@@ -502,7 +515,7 @@ class SacCaeAgent(object):
 
         if self.decoder is not None and step % self.decoder_update_freq == 0:
             obs_anchor, obs_pos = cpc_kwargs["obs_anchor"], cpc_kwargs["obs_pos"]
-            self.update_decoder(obs, obs, obs_anchor, obs_pos, L, step)
+            self.update_decoder_and_comparison(obs, obs, obs_anchor, obs_pos, L, step)
 
     def save(self, model_dir, step):
         torch.save(
