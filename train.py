@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument('--action_repeat', default=4, type=int)
     parser.add_argument('--frame_stack', default=3, type=int)
     # replay buffer
-    parser.add_argument('--replay_buffer_capacity', default=100000, type=int)
+    parser.add_argument('--replay_buffer_capacity', default=700000, type=int)
     # train
     parser.add_argument('--agent', default='sac_cae', type=str)
     parser.add_argument('--init_steps', default=1000, type=int)
@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument('--decoder_update_freq', default=1, type=int)
     parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
     parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
-    parser.add_argument('--comparison_lambda', default=2e-8, type=float)
+    parser.add_argument('--comparison_lambda', default=1.0, type=float)
     parser.add_argument('--num_layers', default=4, type=int)
     parser.add_argument('--num_filters', default=32, type=int)
     parser.add_argument('--curl_latent_dim', default=128, type=int)
